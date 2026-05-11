@@ -82,11 +82,13 @@ export default function App() {
   const audioContext = useRef<AudioContext | null>(null);
 
   const initAudio = useCallback(() => {
-    if (!audioContext.current) {
+    let ctx = audioContext.current;
+    if (!ctx) {
       try {
         const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
         if (AudioCtx) {
-          audioContext.current = new AudioCtx();
+          ctx = new AudioCtx();
+          audioContext.current = ctx;
         }
       } catch (e) {
         console.error("AudioContext not supported", e);
@@ -94,27 +96,31 @@ export default function App() {
       }
     }
     
+    if (!ctx) return;
+    
     const playSilentNote = () => {
-      const ctx = audioContext.current;
       if (ctx) {
         try {
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          gain.gain.setValueAtTime(0.0001, ctx.currentTime);
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.start();
-          osc.stop(ctx.currentTime + 0.01);
+          const buffer = ctx.createBuffer(1, 1, 22050);
+          const source = ctx.createBufferSource();
+          source.buffer = buffer;
+          source.connect(ctx.destination);
+          if (source.start) {
+            source.start(0);
+          } else {
+            (source as any).noteOn(0);
+          }
         } catch (e) {
           console.error("Failed to play silent note", e);
         }
       }
     };
 
-    if (audioContext.current?.state === 'suspended') {
-      audioContext.current.resume().catch(console.error);
+    if (ctx.state === 'suspended') {
+      ctx.resume().then(playSilentNote).catch(console.error);
+    } else {
+      playSilentNote();
     }
-    playSilentNote();
   }, []);
 
   useEffect(() => {
@@ -122,13 +128,16 @@ export default function App() {
       initAudio();
       // Remove event listeners once unlock has been called to prevent multiple silent notes
       window.removeEventListener('touchstart', unlock);
-      window.removeEventListener('mousedown', unlock);
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('click', unlock);
     };
     window.addEventListener('touchstart', unlock, { once: true });
-    window.addEventListener('mousedown', unlock, { once: true });
+    window.addEventListener('touchend', unlock, { once: true });
+    window.addEventListener('click', unlock, { once: true });
     return () => {
       window.removeEventListener('touchstart', unlock);
-      window.removeEventListener('mousedown', unlock);
+      window.removeEventListener('touchend', unlock);
+      window.removeEventListener('click', unlock);
     };
   }, [initAudio]);
 
