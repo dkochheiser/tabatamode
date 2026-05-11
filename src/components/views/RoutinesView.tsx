@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Zap, Play, Star, Settings2, Trash2, RotateCcw, Clock } from 'lucide-react';
+import { Zap, Play, Star, Pencil, Trash2, RotateCcw, Clock } from 'lucide-react';
 import { Config } from '../../types';
 
 interface RoutinesViewProps {
@@ -43,17 +43,22 @@ export function RoutinesView({ routines, onSelect, onDelete, onEdit, onToggleFav
                   {routine.name}
                 </h3>
               </div>
-              <div className="flex items-center gap-6 text-xs font-mono font-bold uppercase tracking-widest text-zinc-500">
-                 <span className="flex items-center gap-2">
-                  <RotateCcw size={12} className="text-zinc-700" />
+              {routine.note && (
+                <p className="text-sm text-white font-medium mb-4 line-clamp-2 italic">
+                  "{routine.note}"
+                </p>
+              )}
+              <div className="flex items-center gap-6 text-[10px] sm:text-xs font-mono font-bold uppercase tracking-widest">
+                 <span className="flex items-center gap-2 text-orange-500">
+                  <RotateCcw size={12} className="text-orange-500" />
                   {routine.reps} Rounds
                 </span>
-                <span className="flex items-center gap-2">
-                  <Zap size={12} className="text-neon-lime/60" />
+                <span className="flex items-center gap-2 text-neon-lime">
+                  <Zap size={12} className="text-neon-lime" />
                   {routine.work}s Work
                 </span>
-                <span className="flex items-center gap-2">
-                  <Clock size={12} className="text-electric-cyan/60" />
+                <span className="flex items-center gap-2 text-yellow-400">
+                  <Clock size={12} className="text-yellow-400" />
                   {routine.rest}s Rest
                 </span>
               </div>
@@ -69,17 +74,17 @@ export function RoutinesView({ routines, onSelect, onDelete, onEdit, onToggleFav
               </button>
               <button 
                 onClick={() => onEdit(routine)}
-                className="flex-1 px-4 text-zinc-600 hover:text-electric-cyan hover:bg-zinc-900 transition-all border-t border-zinc-900"
+                className="flex-1 px-4 text-blue-400 hover:text-white hover:bg-blue-500/20 transition-all border-t border-zinc-900"
                 aria-label={`Edit ${routine.name} routine`}
               >
-                <Settings2 size={18} />
+                <Pencil size={18} />
               </button>
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
                   onDelete(routine.id!);
                 }}
-                className="flex-1 px-4 text-zinc-600 hover:text-crimson-red hover:bg-zinc-900 transition-all border-t border-zinc-900"
+                className="flex-1 px-4 text-red-500 hover:text-white hover:bg-red-500/20 transition-all border-t border-zinc-900"
                 aria-label={`Delete ${routine.name} routine`}
               >
                 <Trash2 size={18} />

@@ -11,6 +11,7 @@ interface RoutineEditorModalProps {
 
 export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorModalProps) {
   const [name, setName] = useState(routine.name || '');
+  const [note, setNote] = useState(routine.note || '');
   const [reps, setReps] = useState(routine.reps.toString());
   const [workMins, setWorkMins] = useState(Math.floor(routine.work / 60).toString());
   const [workSecs, setWorkSecs] = useState((routine.work % 60).toString());
@@ -25,6 +26,7 @@ export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorMo
     onSave({ 
       ...routine, 
       name, 
+      note,
       reps: parsedReps, 
       work: Math.max(1, parsedWork), 
       rest: parsedRest 
@@ -62,6 +64,21 @@ export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorMo
               value={name}
               onChange={e => setName(e.target.value)}
               className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-xl text-xl font-bold outline-none focus:border-emerald-500/50 transition-colors"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between px-1">
+              <label className="text-xs font-black uppercase tracking-widest text-slate-500">Note</label>
+              <span className={`text-[10px] font-mono ${note.length > 250 ? 'text-red-500' : 'text-slate-600'}`}>
+                {note.length}/250
+              </span>
+            </div>
+            <textarea 
+              value={note}
+              onChange={e => setNote(e.target.value.slice(0, 250))}
+              placeholder="Add cues or notes for this session..."
+              className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-xl text-sm font-medium outline-none focus:border-emerald-500/50 transition-colors h-24 resize-none"
             />
           </div>
 

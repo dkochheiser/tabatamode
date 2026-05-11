@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
-  Play, X, RotateCcw, Zap, ChevronRight, AlertTriangle,
+  Play, X, RotateCcw, Zap, ChevronRight, ChevronDown, AlertTriangle,
   Volume2, VolumeX, Clock, ClipboardList, Settings2, Save, Plus, Trash2, History, Timer, Info, Star, Menu, HelpCircle
 } from 'lucide-react';
 import { TimerPhase, AppView, View, Config, HistoryRecord } from './types';
@@ -248,8 +248,15 @@ export default function App() {
     setIsPaused(prev => !prev);
   }, [isPaused, phase]);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [view]);
+
   const startWorkout = (targetConfig?: Config) => {
     initAudio();
+    // Scroll to top
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+
     // Check if targetConfig is a valid Config object (and not a MouseEvent)
     const isValidConfig = targetConfig && 'reps' in targetConfig;
     const activeConfig = isValidConfig ? targetConfig : config;
@@ -447,7 +454,10 @@ export default function App() {
             {isMenuOpen ? <X className="w-6 h-6 text-black" /> : <Zap className="w-6 h-6 text-black fill-current" />}
           </div>
           <div className="flex flex-col items-start leading-none">
-            <span className="text-2xl font-display uppercase italic tracking-tighter text-white">TABATA<span className="text-neon-lime">MODE</span></span>
+            <div className="flex items-center gap-2">
+              <span className="text-2xl font-display uppercase italic tracking-tighter text-white">TABATA<span className="text-neon-lime">MODE</span></span>
+              <ChevronDown size={20} className={`md:hidden text-zinc-500 group-hover:text-white transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} />
+            </div>
           </div>
         </button>
         
@@ -517,13 +527,6 @@ export default function App() {
             </button>
           </div>
 
-          <button 
-            onClick={() => setIsMenuOpen(!isMenuOpen)}
-            aria-label="Toggle navigation menu"
-            className="md:hidden p-2.5 bg-slate-800 rounded-xl text-slate-300 hover:text-white transition-all outline-none"
-          >
-            <Menu size={24} />
-          </button>
         </div>
       </nav>
 
@@ -541,8 +544,8 @@ export default function App() {
           <SaveModal
             config={config}
             onClose={() => setIsSavingTemplate(false)}
-            onSave={(name) => {
-              setRoutines(prev => [...prev, { ...config, id: crypto.randomUUID(), name }]);
+            onSave={(name, note) => {
+              setRoutines(prev => [...prev, { ...config, id: crypto.randomUUID(), name, note }]);
               setIsSavingTemplate(false);
             }}
           />
@@ -580,7 +583,7 @@ export default function App() {
                         <AlertTriangle className="text-black" size={28} />
                       </div>
                       <p className="text-black font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] text-xs sm:text-sm lg:text-base leading-tight">
-                        // UPDATE THE ROUNDS, WORK, AND REST DURATIONS BELOW TO CUSTOMIZE YOUR SESSION
+                        // UPDATE THE ROUNDS, WORK, AND REST DURATIONS BELOW TO CUSTOMIZE YOUR SESSION. USE THE MENU ABOVE FOR PRESETS.
                       </p>
                     </div>
                   </div>
@@ -611,12 +614,12 @@ export default function App() {
                   </div>
 
                   {/* Total Estimated Time Indicator */}
-                  <div className="flex items-center justify-center py-2 px-6 rounded-full bg-zinc-900/50 border border-zinc-800/50 w-fit mx-auto gap-4 group transition-all duration-300">
+                  <div className="flex items-center justify-center py-1 px-6 rounded-full bg-zinc-900/50 border border-zinc-800/50 w-fit mx-auto gap-4 group transition-all duration-300">
                     <span className="text-yellow-400 font-display italic text-3xl tracking-tight uppercase">// TOTAL_TIME:</span>
                     <span className="text-yellow-400 font-display italic text-3xl tracking-tight">
                       {(() => {
                         const total = (config.reps * config.work) + (Math.max(0, config.reps - 1) * config.rest);
-                        return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+                        return formatTime(total);
                       })()}
                     </span>
                   </div>
@@ -828,7 +831,7 @@ export default function App() {
                         className="relative z-10 flex items-center justify-center"
                       >
                         <span className={`text-[clamp(6rem,35vw,18rem)] leading-none font-display text-white select-none tabular-nums tracking-tighter block ${phase === TimerPhase.PREPARE && timeLeft <= 5 ? 'text-blue-400' : ''}`}>
-                          {phase === TimerPhase.DONE ? 'FIN' : timeLeft}
+                          {phase === TimerPhase.DONE ? 'FIN' : formatTime(timeLeft)}
                         </span>
                       </motion.div>
                     </AnimatePresence>

@@ -6,11 +6,18 @@ import { Config } from '../../types';
 interface SaveModalProps {
   config: Config;
   onClose: () => void;
-  onSave: (name: string) => void;
+  onSave: (name: string, note: string) => void;
 }
 
 export function SaveModal({ config, onClose, onSave }: SaveModalProps) {
   const [name, setName] = useState('');
+  const [note, setNote] = useState('');
+
+  const handleSave = () => {
+    if (name) {
+      onSave(name, note);
+    }
+  };
 
   return (
     <motion.div 
@@ -24,7 +31,7 @@ export function SaveModal({ config, onClose, onSave }: SaveModalProps) {
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         exit={{ scale: 0.9, opacity: 0, y: 20 }}
-        className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl"
+        className="w-full max-w-sm bg-slate-900 border border-slate-800 rounded-[2.5rem] p-8 shadow-2xl overflow-y-auto max-h-[90vh]"
         onClick={e => e.stopPropagation()}
       >
         <div className="text-center mb-8">
@@ -36,19 +43,37 @@ export function SaveModal({ config, onClose, onSave }: SaveModalProps) {
         </div>
 
         <div className="space-y-4 mb-8">
-          <div className="bg-slate-950/50 p-6 rounded-2xl border border-slate-800">
-            <input 
-              autoFocus
-              type="text"
-              placeholder="e.g. My Morning Fire"
-              value={name}
-              onChange={e => setName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && name && onSave(name)}
-              className="w-full bg-transparent border-none text-2xl font-bold text-center outline-none placeholder:text-slate-700"
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-slate-500 px-1">Routine Name</label>
+            <div className="bg-slate-950/50 p-4 rounded-2xl border border-slate-800">
+              <input 
+                autoFocus
+                type="text"
+                placeholder="e.g. My Morning Fire"
+                value={name}
+                onChange={e => setName(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleSave()}
+                className="w-full bg-transparent border-none text-xl font-bold text-center outline-none placeholder:text-slate-700"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex justify-between px-1">
+              <label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Note</label>
+              <span className={`text-[10px] font-mono ${note.length > 250 ? 'text-red-500' : 'text-slate-600'}`}>
+                {note.length}/250
+              </span>
+            </div>
+            <textarea 
+              value={note}
+              onChange={e => setNote(e.target.value.slice(0, 250))}
+              placeholder="Add cues or notes..."
+              className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-2xl text-xs font-medium outline-none focus:border-emerald-500/50 transition-colors h-24 resize-none"
             />
           </div>
           
-          <div className="flex justify-center gap-4 text-xs font-black uppercase tracking-widest text-slate-500">
+          <div className="flex justify-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-500 pt-2">
             <span>{config.reps} Rounds</span>
             <span>•</span>
             <span>{config.work}s Work</span>
@@ -65,7 +90,7 @@ export function SaveModal({ config, onClose, onSave }: SaveModalProps) {
             Cancel
           </button>
           <button 
-            onClick={() => name && onSave(name)}
+            onClick={handleSave}
             disabled={!name}
             className="flex-1 py-4 bg-emerald-500 disabled:opacity-50 disabled:grayscale text-slate-950 rounded-2xl font-black uppercase tracking-tighter hover:brightness-110 shadow-lg transition-all"
           >

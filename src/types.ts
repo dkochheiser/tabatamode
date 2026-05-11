@@ -17,6 +17,7 @@ export type View = AppView;
 export interface Config {
   id?: string;
   name?: string;
+  note?: string;
   reps: number;
   work: number; // stores total seconds
   rest: number; // stores total seconds
