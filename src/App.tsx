@@ -68,7 +68,18 @@ export default function App() {
 
   const [routines, setRoutines] = useState<Config[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ROUTINES);
-    return saved ? JSON.parse(saved) : DEFAULT_ROUTINES;
+    let initialRoutines: Config[] = saved ? JSON.parse(saved) : DEFAULT_ROUTINES;
+
+    if (!initialRoutines.some(r => r.name === 'Pomodoro')) {
+      initialRoutines.push({
+        id: Date.now().toString(),
+        name: 'Pomodoro',
+        reps: 4,
+        work: 1500,
+        rest: 300
+      });
+    }
+    return initialRoutines;
   });
 
   useEffect(() => {
@@ -614,9 +625,15 @@ export default function App() {
                     <button
                       onClick={() => startWorkout()}
                       onTouchStart={() => initAudio()}
-                      className="flex-[2] h-24 bg-neon-lime text-black rounded-lg font-display text-4xl uppercase italic hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-neon-lime/20 flex items-center justify-center gap-4 group"
+                      className="flex-[2] relative overflow-hidden h-24 bg-neon-lime text-black rounded-lg font-display text-4xl uppercase italic hover:scale-[1.02] active:scale-95 transition-all shadow-xl shadow-neon-lime/20 group"
                     >
-                      LETS DO IT! <Play className="fill-current group-hover:translate-x-1 transition-transform" size={32} />
+                      <div className="absolute inset-0 pointer-events-none opacity-[0.05] overflow-hidden">
+                        <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+                        <div className="absolute inset-0 bg-gradient-to-tr from-black/10 to-transparent"></div>
+                      </div>
+                      <div className="relative z-10 flex items-center justify-center w-full h-full gap-4">
+                        LETS DO IT! <Play className="fill-current group-hover:translate-x-1 transition-transform" size={32} />
+                      </div>
                     </button>
                     <button
                       onClick={() => setIsSavingTemplate(true)}
@@ -880,17 +897,29 @@ export default function App() {
                 <button 
                   onClick={() => startWorkout(config)}
                   onTouchStart={() => initAudio()}
-                  className="flex-1 h-20 sm:h-32 bg-blue-600 border-2 border-blue-400/50 text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:bg-blue-500 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_30px_rgba(37,99,235,0.3)] flex items-center justify-center gap-4 sm:gap-6 group"
+                  className="flex-1 relative overflow-hidden h-20 sm:h-32 bg-blue-600 border-2 border-blue-400/50 text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:bg-blue-500 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_30px_rgba(37,99,235,0.3)] group"
                 >
-                  <RotateCcw size={32} className="group-hover:rotate-[-90deg] transition-transform" />
-                  <span className="inline">RESTART</span>
+                  <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent"></div>
+                  </div>
+                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-4 sm:gap-6">
+                    <RotateCcw size={32} className="group-hover:rotate-[-90deg] transition-transform" />
+                    <span className="inline">RESTART</span>
+                  </div>
                 </button>
                 <button 
                   onClick={exitWorkout}
-                  className="flex-1 h-20 sm:h-32 bg-crimson-red text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:opacity-90 transition-all flex items-center justify-center gap-4 sm:gap-6 group"
+                  className="flex-1 relative overflow-hidden h-20 sm:h-32 bg-crimson-red text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:opacity-90 transition-all group"
                 >
-                  <X size={32} className="group-hover:rotate-90 transition-transform" />
-                  <span className="inline">ABORT</span>
+                  <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
+                    <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent"></div>
+                  </div>
+                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-4 sm:gap-6">
+                    <X size={32} className="group-hover:rotate-90 transition-transform" />
+                    <span className="inline">ABORT</span>
+                  </div>
                 </button>
               </div>
             </motion.div>

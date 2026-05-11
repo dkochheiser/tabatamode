@@ -22,6 +22,7 @@ export const DEFAULT_ROUTINES: Config[] = [
   { id: '3', name: 'Kegels', reps: 20, work: 5, rest: 5 },
   { id: '4', name: '1 Minute Stretch', reps: 1, work: 60, rest: 10 },
   { id: '5', name: 'HIIT', reps: 8, work: 20, rest: 10 },
+  { id: '6', name: 'Pomodoro', reps: 4, work: 1500, rest: 300 },
 ];
 
 export const QUOTES = [
