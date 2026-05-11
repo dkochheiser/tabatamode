@@ -4,10 +4,11 @@ export const STORAGE_KEYS = {
   HISTORY: 'tabatamode_history',
   ROUTINES: 'tabatamode_routines',
   HIDE_HELP: 'tabatamode_hide_help',
+  SOUND_MODE: 'tabatamode_sound_mode',
 };
 
 export const INITIAL_CONFIG: Config = {
-  name: 'Standard Tabata',
+  name: 'TABATA',
   reps: 8,
   work: 20,
   rest: 10,
@@ -17,12 +18,11 @@ export const INITIAL_CONFIG: Config = {
 export const PREPARE_TIME = 10;
 
 export const DEFAULT_ROUTINES: Config[] = [
-  { id: '1', name: 'Standard Tabata', reps: 8, work: 20, rest: 10, isFavorite: true },
-  { id: '2', name: 'High Intensity', reps: 10, work: 45, rest: 15 },
-  { id: '3', name: 'Kegels', reps: 20, work: 5, rest: 5 },
-  { id: '4', name: '1 Minute Stretch', reps: 1, work: 60, rest: 10 },
-  { id: '5', name: 'HIIT', reps: 8, work: 20, rest: 10 },
-  { id: '6', name: 'Pomodoro', reps: 4, work: 1500, rest: 300 },
+  { id: 'standard-tabata', name: 'TABATA', reps: 8, work: 20, rest: 10, isFavorite: true },
+  { id: 'kegels', name: 'Kegels', reps: 20, work: 5, rest: 5 },
+  { id: 'stretch', name: 'Stretch routine', reps: 10, work: 60, rest: 15 },
+  { id: 'pomodoro', name: 'Pomodoro', reps: 4, work: 1500, rest: 300 },
+  { id: 'hiit-classic', name: 'Classic HIIT', reps: 10, work: 45, rest: 15 },
 ];
 
 export const QUOTES = [

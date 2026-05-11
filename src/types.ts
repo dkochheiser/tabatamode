@@ -12,6 +12,11 @@ export enum AppView {
   PRIVACY = 'privacy',
 }
 
+export enum SoundMode {
+  OFFICE = 'Office',
+  GYM = 'Gym',
+}
+
 export type View = AppView;
 
 export interface Config {

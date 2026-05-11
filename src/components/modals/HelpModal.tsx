@@ -73,12 +73,12 @@ export function HelpModal({ isOpen, onClose, showDismissOption = true }: HelpMod
               </section>
 
               <section className="space-y-6">
-                <h3 className="text-xs font-mono font-bold text-neon-lime uppercase tracking-[0.3em] border-l-2 border-neon-lime pl-4">02 // DATA & PRESETS</h3>
+                <h3 className="text-xs font-mono font-bold text-neon-lime uppercase tracking-[0.3em] border-l-2 border-neon-lime pl-4">02 // DATA & ROUTINES</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-zinc-900/50 p-6 rounded border border-zinc-900 group hover:border-zinc-700 transition-colors">
                     <Save className="text-white mb-4" size={24} />
-                    <h4 className="font-display uppercase text-xl italic mb-2">Save Presets</h4>
-                    <p className="text-white text-base leading-relaxed">Save your favorite intervals as Presets for one-tap access in future sessions.</p>
+                    <h4 className="font-display uppercase text-xl italic mb-2">Save Routines</h4>
+                    <p className="text-white text-base leading-relaxed">Save your favorite intervals as Routines for one-tap access in future sessions.</p>
                   </div>
                   <div className="bg-zinc-900/50 p-6 rounded border border-zinc-900 group hover:border-zinc-700 transition-colors">
                     <CheckCircle2 className="text-emerald-500 mb-4" size={24} />

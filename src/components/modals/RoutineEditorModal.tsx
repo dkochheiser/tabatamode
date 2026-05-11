@@ -52,8 +52,10 @@ export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorMo
           <div className="w-16 h-16 bg-blue-500 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg">
             <Settings2 size={32} className="text-slate-950" />
           </div>
-          <h2 className="text-2xl font-black uppercase tracking-tight">Edit Routine</h2>
-          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">Refine your session</p>
+          <h2 className="text-2xl font-black uppercase tracking-tight">{routine.name ? 'Edit Routine' : 'Create Routine'}</h2>
+          <p className="text-slate-500 font-bold text-xs uppercase tracking-widest mt-1">
+            {routine.name ? 'Refine your session' : 'Design your performance blueprint'}
+          </p>
         </div>
 
         <div className="space-y-6 mb-8">
@@ -62,6 +64,7 @@ export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorMo
             <input 
               type="text"
               value={name}
+              placeholder="e.g. Morning Fire"
               onChange={e => setName(e.target.value)}
               className="w-full bg-slate-950/50 border border-slate-800 p-4 rounded-xl text-xl font-bold outline-none focus:border-emerald-500/50 transition-colors"
             />
@@ -162,9 +165,10 @@ export function RoutineEditorModal({ routine, onClose, onSave }: RoutineEditorMo
           </button>
           <button 
             onClick={handleSave}
-            className={`flex-1 py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black uppercase tracking-tighter hover:brightness-110 shadow-lg transition-all`}
+            disabled={!name.trim()}
+            className={`flex-1 py-4 bg-emerald-500 text-slate-950 rounded-2xl font-black uppercase tracking-tighter hover:brightness-110 shadow-lg transition-all disabled:opacity-50`}
           >
-            Update
+            {routine.name ? 'Update' : 'Create'}
           </button>
         </div>
       </motion.div>

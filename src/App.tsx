@@ -4,7 +4,7 @@ import {
   Play, X, RotateCcw, Zap, ChevronRight, ChevronDown, AlertTriangle,
   Volume2, VolumeX, Clock, ClipboardList, Settings2, Save, Plus, Trash2, History, Timer, Info, Star, Menu, HelpCircle
 } from 'lucide-react';
-import { TimerPhase, AppView, View, Config, HistoryRecord } from './types';
+import { TimerPhase, AppView, View, Config, HistoryRecord, SoundMode } from './types';
 import { STORAGE_KEYS, INITIAL_CONFIG, PREPARE_TIME, DEFAULT_ROUTINES, QUOTES, MAX_HISTORY_RECORDS } from './constants';
 import { formatTime } from './lib/utils';
 import { VitalItem } from './components/VitalItem';
@@ -18,7 +18,7 @@ import { RoutinesView } from './components/views/RoutinesView';
 import { PrivacyView } from './components/views/PrivacyView';
 
 export default function App() {
-  const [view, setView] = useState<AppView>(AppView.TRAINING);
+  const [view, setView] = useState<AppView>(AppView.ROUTINES);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -34,9 +34,15 @@ export default function App() {
   const [wasPaused, setWasPaused] = useState(false);
   const [quote, setQuote] = useState('');
   const [editingField, setEditingField] = useState<'reps' | 'work' | 'rest' | null>(null);
+  const [soundMode, setSoundMode] = useState<SoundMode>(() => {
+    const saved = localStorage.getItem(STORAGE_KEYS.SOUND_MODE);
+    return (saved as SoundMode) || SoundMode.OFFICE;
+  });
   const [isSavingTemplate, setIsSavingTemplate] = useState(false);
   const [editingRoutine, setEditingRoutine] = useState<Config | null>(null);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [isAudioSettingsExpanded, setIsAudioSettingsExpanded] = useState(false);
+  const [isAudioPopoverOpen, setIsAudioPopoverOpen] = useState(false);
 
   useEffect(() => {
     setQuote(QUOTES[Math.floor(Math.random() * QUOTES.length)]);
@@ -68,17 +74,17 @@ export default function App() {
 
   const [routines, setRoutines] = useState<Config[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.ROUTINES);
-    let initialRoutines: Config[] = saved ? JSON.parse(saved) : DEFAULT_ROUTINES;
+    const savedRoutines: Config[] = saved ? JSON.parse(saved) : [];
+    
+    // Start with the defaults to ensure they are always present first (or just present)
+    const initialRoutines = [...savedRoutines];
+    
+    DEFAULT_ROUTINES.forEach(def => {
+      if (!initialRoutines.some(r => r.id === def.id || r.name === def.name)) {
+        initialRoutines.unshift(def); // Add missing defaults to the top
+      }
+    });
 
-    if (!initialRoutines.some(r => r.name === 'Pomodoro')) {
-      initialRoutines.push({
-        id: Date.now().toString(),
-        name: 'Pomodoro',
-        reps: 4,
-        work: 1500,
-        rest: 300
-      });
-    }
     return initialRoutines;
   });
 
@@ -89,6 +95,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.ROUTINES, JSON.stringify(routines));
   }, [routines]);
+
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEYS.SOUND_MODE, soundMode);
+  }, [soundMode]);
 
   const audioContext = useRef<AudioContext | null>(null);
 
@@ -165,71 +175,60 @@ export default function App() {
     if (ctx.state === 'suspended') {
       ctx.resume();
     }
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-
+    
     const now = ctx.currentTime;
+    const isGym = soundMode === SoundMode.GYM;
+
+    const playTone = (freq: number, duration: number, volume: number = 0.3, toneType: OscillatorType = 'sine', startTime: number = now) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = toneType;
+      osc.frequency.setValueAtTime(freq, startTime);
+      gain.gain.setValueAtTime(0, startTime);
+      gain.gain.linearRampToValueAtTime(volume, startTime + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(startTime);
+      osc.stop(startTime + duration);
+    };
 
     switch (type) {
       case 'tick':
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(440, now);
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.2, now + 0.01);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
-        osc.start(now);
-        osc.stop(now + 0.1);
+        if (isGym) {
+          playTone(660, 0.15, 0.4, 'square');
+        } else {
+          playTone(440, 0.1, 0.2, 'sine');
+        }
         break;
       case 'work':
-        // High double beep
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, now);
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.4, now + 0.05);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-        
-        const osc2 = ctx.createOscillator();
-        const gain2 = ctx.createGain();
-        osc2.connect(gain2);
-        gain2.connect(ctx.destination);
-        osc2.type = 'sine';
-        osc2.frequency.setValueAtTime(1100, now + 0.2);
-        gain2.gain.setValueAtTime(0, now + 0.2);
-        gain2.gain.linearRampToValueAtTime(0.4, now + 0.25);
-        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.5);
-        osc2.start(now + 0.2);
-        osc2.stop(now + 0.5);
+        if (isGym) {
+          // Aggressive triple alert
+          [880, 880, 1760].forEach((f, i) => {
+             playTone(f, 0.3, 0.5, 'sawtooth', now + i * 0.1);
+          });
+        } else {
+          playTone(880, 0.2, 0.4, 'sine');
+          playTone(1100, 0.3, 0.4, 'sine', now + 0.2);
+        }
         break;
       case 'rest':
-        // Lower soothing beep
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(330, now);
-        gain.gain.setValueAtTime(0, now);
-        gain.gain.linearRampToValueAtTime(0.3, now + 0.1);
-        gain.gain.exponentialRampToValueAtTime(0.01, now + 0.6);
-        osc.start(now);
-        osc.stop(now + 0.6);
+        if (isGym) {
+          playTone(220, 0.8, 0.4, 'triangle');
+        } else {
+          playTone(330, 0.6, 0.3, 'sine');
+        }
         break;
       case 'done':
-        // Ascending melody
-        [440, 554, 659, 880].forEach((freq, i) => {
-          const o = ctx.createOscillator();
-          const g = ctx.createGain();
-          o.connect(g);
-          g.connect(ctx.destination);
-          o.type = 'sine';
-          o.frequency.setValueAtTime(freq, now + i * 0.15);
-          g.gain.setValueAtTime(0, now + i * 0.15);
-          g.gain.linearRampToValueAtTime(0.3, now + i * 0.15 + 0.05);
-          g.gain.exponentialRampToValueAtTime(0.01, now + i * 0.15 + 0.4);
-          o.start(now + i * 0.15);
-          o.stop(now + i * 0.15 + 0.4);
-        });
+        if (isGym) {
+          [440, 660, 880, 1320].forEach((freq, i) => {
+            playTone(freq, 0.6, 0.4, 'sawtooth', now + i * 0.12);
+          });
+        } else {
+          [440, 554, 659, 880, 1108].forEach((freq, i) => {
+            playTone(freq, 0.4, 0.3, 'sine', now + i * 0.15);
+          });
+        }
         break;
     }
   };
@@ -384,18 +383,18 @@ export default function App() {
   const getBgGlow = () => {
     switch (phase) {
       case TimerPhase.PREPARE: return '#2563eb';
-      case TimerPhase.WORK: return 'rgba(34, 197, 94, 0.35)';
-      case TimerPhase.REST: return 'rgba(250, 204, 21, 0.35)';
+      case TimerPhase.WORK: return '#22c55e';
+      case TimerPhase.REST: return '#facc15';
       case TimerPhase.DONE: return 'rgba(220, 38, 38, 0.4)';
-      default: return 'rgba(34, 197, 94, 0.35)';
+      default: return '#22c55e';
     }
   };
 
   const getPhaseColorClass = () => {
     switch (phase) {
       case TimerPhase.PREPARE: return 'text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]';
-      case TimerPhase.WORK: return 'text-green-400 drop-shadow-[0_0_20px_rgba(34,197,94,0.7)] font-black italic';
-      case TimerPhase.REST: return 'text-yellow-400 drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]';
+      case TimerPhase.WORK: return 'text-white font-black italic';
+      case TimerPhase.REST: return 'text-white font-bold';
       case TimerPhase.DONE: return 'text-white drop-shadow-[0_0_20px_rgba(255,0,0,0.5)]';
       default: return 'text-white';
     }
@@ -403,10 +402,10 @@ export default function App() {
 
   const getColorClass = () => {
     switch (phase) {
-      case TimerPhase.PREPARE:
+      case TimerPhase.PREPARE: return 'text-white';
       case TimerPhase.WORK:
       case TimerPhase.REST: return 'text-white';
-      case TimerPhase.DONE: return 'text-zinc-500';
+      case TimerPhase.DONE: return 'text-white';
       default: return 'text-white';
     }
   };
@@ -414,8 +413,8 @@ export default function App() {
   const getBorderColor = () => {
     switch (phase) {
       case TimerPhase.PREPARE: return 'border-blue-600 timer-glow-prepare shadow-[0_0_50px_rgba(30,64,175,0.5)]';
-      case TimerPhase.WORK: return 'border-green-500/40 timer-glow-work';
-      case TimerPhase.REST: return 'border-yellow-400/40 timer-glow-rest';
+      case TimerPhase.WORK: return 'border-green-500 shadow-[0_0_50px_rgba(34,197,94,0.5)]';
+      case TimerPhase.REST: return 'border-yellow-400 shadow-[0_0_50px_rgba(250,204,21,0.5)]';
       case TimerPhase.DONE: return 'border-red-600 shadow-[0_0_50px_rgba(220,38,38,0.5)]';
       default: return 'border-zinc-800';
     }
@@ -444,85 +443,158 @@ export default function App() {
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-neon-lime/30 flex flex-col">
       {/* Navigation */}
-      <nav className="h-20 border-b border-zinc-900 flex items-center justify-between px-8 bg-zinc-950/80 backdrop-blur-md shrink-0 sticky top-0 z-40">
+      <nav className="h-14 md:h-20 landscape:h-12 border-b border-zinc-900 flex items-center justify-between px-4 md:px-8 bg-zinc-950/80 backdrop-blur-md shrink-0 sticky top-0 z-40 transition-all duration-300">
         <button 
           onClick={() => setIsMenuOpen(!isMenuOpen)}
           aria-label={isMenuOpen ? "Close menu" : "Open menu"}
-          className="flex items-center gap-3 hover:opacity-80 transition-opacity outline-none group"
+          className="flex items-center gap-2 md:gap-3 hover:opacity-80 transition-opacity outline-none group"
         >
-          <div className="w-10 h-10 bg-neon-lime rounded-sm flex items-center justify-center group-active:scale-95 transition-transform">
-            {isMenuOpen ? <X className="w-6 h-6 text-black" /> : <Zap className="w-6 h-6 text-black fill-current" />}
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-neon-lime rounded-sm flex items-center justify-center group-active:scale-95 transition-transform">
+            {isMenuOpen ? <X className="w-5 h-5 md:w-6 md:h-6 text-black" /> : <Zap className="w-5 h-5 md:w-6 md:h-6 text-black fill-current" />}
           </div>
           <div className="flex flex-col items-start leading-none">
             <div className="flex items-center gap-2">
-              <span className="text-2xl font-display uppercase italic tracking-tighter text-white">TABATA<span className="text-neon-lime">MODE</span></span>
-              <ChevronDown size={20} className={`md:hidden text-zinc-500 group-hover:text-white transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} />
+              <span className="text-xl md:text-2xl font-display uppercase italic tracking-tighter text-white">TABATA<span className="text-neon-lime">MODE</span></span>
+              <ChevronDown size={16} className={`md:hidden text-zinc-500 group-hover:text-white transition-transform duration-300 ${isMenuOpen ? 'rotate-180' : ''}`} />
             </div>
           </div>
         </button>
         
-        <div className="flex items-center gap-4 sm:gap-6">
-          <button 
-            onClick={() => {
-              const newState = !soundEnabled;
-              setSoundEnabled(newState);
-              if (newState) initAudio();
-            }}
-            onTouchStart={() => {
-              if (!soundEnabled) initAudio();
-            }}
-            aria-label={soundEnabled ? "Mute sound" : "Unmute sound"}
-            className={`p-2.5 rounded-lg border transition-all flex items-center gap-2 group ${
-              soundEnabled 
-                ? 'bg-neon-lime/10 border-neon-lime/20 text-neon-lime' 
-                : 'bg-zinc-900 border-zinc-800 text-zinc-500'
-            }`}
-          >
-            {soundEnabled ? (
-              <Volume2 size={18} className="group-hover:scale-110 transition-transform" />
-            ) : (
-              <VolumeX size={18} />
-            )}
-            <span className="text-xs font-mono font-bold uppercase tracking-widest hidden md:inline">
-              {soundEnabled ? 'AUDIO' : 'MUTED'}
-            </span>
-          </button>
+        <div className="flex items-center gap-4 sm:gap-6 relative">
+          <div className="relative">
+            <button 
+              onClick={() => setIsAudioPopoverOpen(!isAudioPopoverOpen)}
+              onTouchStart={() => {
+                initAudio();
+              }}
+              aria-label="Sound settings"
+              className={`p-2.5 rounded-lg border transition-all flex items-center gap-2 group ${
+                soundEnabled 
+                  ? 'bg-neon-lime/10 border-neon-lime/20 text-neon-lime' 
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-500'
+              } ${isAudioPopoverOpen ? 'ring-2 ring-neon-lime' : ''}`}
+            >
+              {soundEnabled ? (
+                <Volume2 size={18} className="group-hover:scale-110 transition-transform" />
+              ) : (
+                <VolumeX size={18} />
+              )}
+              <span className="text-xs font-mono font-bold uppercase tracking-widest hidden md:inline">
+                {soundEnabled ? 'AUDIO' : 'MUTED'}
+              </span>
+              <ChevronDown size={14} className={`transition-transform duration-300 ${isAudioPopoverOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            <AnimatePresence>
+              {isAudioPopoverOpen && (
+                <>
+                  {/* Backdrop for closing popover */}
+                  <div 
+                    className="fixed inset-0 z-10" 
+                    onClick={() => setIsAudioPopoverOpen(false)}
+                  />
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute right-0 mt-3 w-64 bg-zinc-950 border border-zinc-800 rounded-sm shadow-2xl z-20 overflow-hidden"
+                  >
+                    <div className="p-4 flex flex-col gap-5 text-white">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <Volume2 size={18} className={soundEnabled ? 'text-neon-lime' : 'text-zinc-500'} />
+                          <span className="text-[11px] font-black uppercase tracking-wider">Master Sound</span>
+                        </div>
+                        <button 
+                          onClick={() => {
+                            setSoundEnabled(!soundEnabled);
+                            initAudio();
+                          }}
+                          className={`w-12 h-6 rounded-sm relative transition-colors ${soundEnabled ? 'bg-neon-lime' : 'bg-zinc-800'}`}
+                        >
+                          <div className={`absolute top-1 w-4 h-4 rounded-sm transition-all ${soundEnabled ? 'left-7 bg-black' : 'left-1 bg-white'}`} />
+                        </button>
+                      </div>
+
+                      <div className="flex flex-col gap-3 pt-2 border-t border-zinc-900">
+                        <div className="flex items-center gap-3">
+                          <Settings2 size={16} className="text-white/60" />
+                          <span className="text-[11px] font-black uppercase tracking-wider text-white">Output Profile</span>
+                        </div>
+                        <div className="flex p-1 bg-black rounded-sm border border-zinc-800 relative h-10">
+                          <motion.div 
+                            className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-sm z-0"
+                            initial={false}
+                            animate={{ x: soundMode === SoundMode.OFFICE ? 0 : '100%', left: soundMode === SoundMode.OFFICE ? 4 : 4 }}
+                            transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                          />
+                          <button
+                            onClick={() => { setSoundMode(SoundMode.OFFICE); initAudio(); }}
+                            className={`flex-1 py-1 text-[10px] font-black uppercase tracking-widest z-10 transition-colors ${
+                              soundMode === SoundMode.OFFICE ? 'text-black' : 'text-white/60 font-bold'
+                            }`}
+                          >
+                            Office
+                          </button>
+                          <button
+                            onClick={() => { setSoundMode(SoundMode.GYM); initAudio(); }}
+                            className={`flex-1 py-1 text-[10px] font-black uppercase tracking-widest z-10 transition-colors ${
+                              soundMode === SoundMode.GYM ? 'text-black' : 'text-white/60 font-bold'
+                            }`}
+                          >
+                            Gym
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-zinc-900/50 p-3 border-t border-zinc-900">
+                      <p className="text-[9px] font-mono text-white leading-tight uppercase tracking-wider text-center">
+                        {soundMode === SoundMode.OFFICE 
+                          ? "Smooth sine pulses" 
+                          : "Aggressive alerts"}
+                      </p>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
 
           <div className="hidden md:flex gap-10 text-sm font-bold uppercase tracking-[0.2em] text-white">
             <button 
-              onClick={() => { setView(AppView.TRAINING); setIsStarted(false); setIsMenuOpen(false); }}
-              className={`${view === AppView.TRAINING ? 'text-neon-lime font-black' : 'hover:text-neon-lime transition-colors'} py-2 relative group`}
+              onClick={() => { setView(AppView.ROUTINES); setIsStarted(false); setIsMenuOpen(false); }}
+              className={`${view === AppView.ROUTINES ? 'text-neon-lime font-black' : 'hover:text-neon-lime transition-colors'} py-2 relative group`}
             >
-              Train
+              ROUTINES
               <motion.div 
-                className={`absolute bottom-0 left-0 h-0.5 bg-neon-lime transition-all ${view === AppView.TRAINING ? 'w-full' : 'w-0 group-hover:w-full'}`}
+                className={`absolute bottom-0 left-0 h-0.5 bg-neon-lime transition-all ${view === AppView.ROUTINES ? 'w-full' : 'w-0 group-hover:w-full'}`}
               />
             </button>
             <button 
               onClick={() => { setView(AppView.HISTORY); setIsStarted(false); setIsMenuOpen(false); }}
               className={`${view === AppView.HISTORY ? 'text-neon-lime font-black' : 'hover:text-neon-lime transition-colors'} py-2 relative group`}
             >
-              Journal
+              JOURNAL
               <motion.div 
                 className={`absolute bottom-0 left-0 h-0.5 bg-neon-lime transition-all ${view === AppView.HISTORY ? 'w-full' : 'w-0 group-hover:w-full'}`}
               />
             </button>
             <button 
-              onClick={() => { setView(AppView.ROUTINES); setIsStarted(false); setIsMenuOpen(false); }}
-              className={`${view === AppView.ROUTINES ? 'text-neon-lime font-black' : 'hover:text-neon-lime transition-colors'} py-2 relative group`}
+              onClick={() => { setView(AppView.TRAINING); setIsStarted(false); setIsMenuOpen(false); }}
+              className={`${view === AppView.TRAINING ? 'text-neon-lime font-black' : 'hover:text-neon-lime transition-colors'} py-2 relative group`}
             >
-              Presets
+              CUSTOM
               <motion.div 
-                className={`absolute bottom-0 left-0 h-0.5 bg-neon-lime transition-all ${view === AppView.ROUTINES ? 'w-full' : 'w-0 group-hover:w-full'}`}
+                className={`absolute bottom-0 left-0 h-0.5 bg-neon-lime transition-all ${view === AppView.TRAINING ? 'w-full' : 'w-0 group-hover:w-full'}`}
               />
             </button>
             <button 
               onClick={() => { setIsHelpOpen(true); setIsMenuOpen(false); }}
-              className="p-2.5 rounded-lg border bg-zinc-900 border-zinc-800 text-zinc-500 hover:text-white hover:border-zinc-700 transition-all flex items-center gap-2 group"
+              className="p-2.5 rounded-lg border bg-zinc-900 border-zinc-800 text-white hover:text-white hover:border-zinc-700 transition-all flex items-center gap-2 group"
             >
               <HelpCircle size={18} className="text-neon-lime group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-mono font-bold uppercase tracking-widest hidden md:inline">
-                Help
+              <span className="text-xs font-mono font-bold uppercase tracking-widest hidden md:inline text-white">
+                HELP
               </span>
             </button>
           </div>
@@ -555,7 +627,13 @@ export default function App() {
             routine={editingRoutine}
             onClose={() => setEditingRoutine(null)}
             onSave={(updated) => {
-              setRoutines(prev => prev.map(r => r.id === updated.id ? updated : r));
+              setRoutines(prev => {
+                const exists = prev.some(r => r.id === updated.id);
+                if (exists) {
+                  return prev.map(r => r.id === updated.id ? updated : r);
+                }
+                return [...prev, updated];
+              });
               setEditingRoutine(null);
             }}
           />
@@ -583,7 +661,7 @@ export default function App() {
                         <AlertTriangle className="text-black" size={28} />
                       </div>
                       <p className="text-black font-black uppercase tracking-[0.1em] sm:tracking-[0.2em] text-xs sm:text-sm lg:text-base leading-tight">
-                        // UPDATE THE ROUNDS, WORK, AND REST DURATIONS BELOW TO CUSTOMIZE YOUR SESSION. USE THE MENU ABOVE FOR PRESETS.
+                        // UPDATE THE ROUNDS, WORK, AND REST DURATIONS BELOW TO CUSTOMIZE YOUR SESSION. USE THE MENU ABOVE FOR ROUTINES.
                       </p>
                     </div>
                   </div>
@@ -642,7 +720,7 @@ export default function App() {
                       onClick={() => setIsSavingTemplate(true)}
                       className="flex-1 h-24 bg-zinc-950 border border-zinc-800 text-white rounded-lg font-display text-2xl uppercase italic hover:bg-zinc-900 transition-all flex items-center justify-center gap-3"
                     >
-                      Save Preset <Save size={24} />
+                      Save Routine <Save size={24} />
                     </button>
                   </div>
 
@@ -662,6 +740,17 @@ export default function App() {
                 onSelect={(routine) => startWorkout(routine)} 
                 onDelete={(id) => setRoutines(prev => prev.filter(r => r.id !== id))}
                 onEdit={(routine) => setEditingRoutine(routine)}
+                onAdd={() => {
+                  setEditingRoutine({
+                    id: crypto.randomUUID(),
+                    name: '',
+                    note: '',
+                    reps: 8,
+                    work: 20,
+                    rest: 10,
+                    isFavorite: false
+                  });
+                }}
                 onToggleFavorite={toggleFavorite}
               />
             ) : (
@@ -673,67 +762,76 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="min-h-full flex flex-col p-4 gap-4 sm:gap-8 max-w-7xl mx-auto w-full"
+              className="h-[calc(100dvh-3.5rem)] md:h-[calc(100dvh-5rem)] landscape:h-[calc(100dvh-3rem)] flex flex-col p-2 sm:p-4 gap-2 sm:gap-4 max-w-7xl mx-auto w-full overflow-hidden"
             >
-              {/* Header Stats */}
-              <div className="flex items-center justify-between gap-4 px-2 sm:px-4">
-                <div className="flex items-center gap-6 sm:gap-12">
-                   <VitalItem 
-                    icon={<Zap className="text-electric-cyan w-4 h-4" />} 
-                    value={`${currentRep}`} 
-                    label="ROUND" 
-                    unit={`of ${config.reps}`} 
-                    color="text-electric-cyan" 
-                  />
-                  <div className="w-px h-10 bg-zinc-800 hidden xs:block"></div>
-                   <VitalItem 
-                    icon={<Clock className="text-white w-4 h-4" />} 
-                    value={formatTime(totalElapsed)} 
-                    label="ELAPSED" 
-                    unit="" 
-                    color="text-white" 
-                  />
-                  <div className="w-px h-10 bg-zinc-800 hidden sm:block"></div>
-                  <VitalItem 
-                    icon={<RotateCcw className="text-neon-lime w-4 h-4" />} 
-                    value={formatTime(Math.max(0, totalSessionTime - totalElapsed))} 
-                    label="TOTAL REMAINING" 
-                    unit="" 
-                    color="text-neon-lime" 
-                  />
-                </div>
-                
-                <div className="hidden lg:flex flex-col items-end gap-1">
-                  <span className="text-xs font-bold text-white uppercase tracking-[0.3em]">Next Phase</span>
-                  <div className="flex items-center gap-4">
-                    <span className={`text-2xl font-display uppercase italic ${phase === TimerPhase.WORK ? 'text-yellow-400' : 'text-green-400'}`}>
-                      {phase === TimerPhase.WORK ? 'Rest' : 'GO!'}
-                    </span>
-                    <ChevronRight size={20} className="text-zinc-800" />
+              <div className="flex-1 flex flex-col landscape:flex-row-reverse gap-2 landscape:gap-4 min-h-0">
+                {/* Stats Section (Right in landscape, Top in portrait) */}
+                <div className="flex flex-col gap-2 sm:gap-4 landscape:w-[240px] md:landscape:w-[300px] landscape:justify-center shrink-0">
+                  <div className="grid grid-cols-3 landscape:grid-cols-1 gap-2 sm:gap-4 px-2 sm:px-4 w-full">
+                    <div className="flex justify-center border-r landscape:border-r-0 landscape:border-b border-zinc-800 last:border-0 pr-2 landscape:pr-0 landscape:pb-2 md:landscape:pb-4 last:pb-0">
+                      <VitalItem 
+                        icon={<Zap className="text-electric-cyan w-4 h-4" />} 
+                        value={`${currentRep}`} 
+                        label="ROUND" 
+                        unit={`of ${config.reps}`} 
+                        color="text-electric-cyan" 
+                        centerAlignment={true}
+                      />
+                    </div>
+                    <div className="flex justify-center border-r landscape:border-r-0 landscape:border-b border-zinc-800 last:border-0 px-2 landscape:px-0 landscape:py-2 md:landscape:py-4 last:pb-0">
+                      <VitalItem 
+                        icon={<Clock className="text-white w-4 h-4" />} 
+                        value={formatTime(totalElapsed)} 
+                        label="ELAPSED" 
+                        unit="" 
+                        color="text-white" 
+                        centerAlignment={true}
+                      />
+                    </div>
+                    <div className="flex justify-center landscape:pt-2 md:landscape:pt-4">
+                      <VitalItem 
+                        icon={<RotateCcw className="text-neon-lime w-4 h-4" />} 
+                        value={formatTime(Math.max(0, totalSessionTime - totalElapsed))} 
+                        label="REMAINING" 
+                        unit="" 
+                        color="text-neon-lime" 
+                        centerAlignment={true}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="hidden lg:flex flex-col items-end gap-1 px-4">
+                    <span className="text-xs font-bold text-white uppercase tracking-[0.3em]">Next Phase</span>
+                    <div className="flex items-center gap-4">
+                      <span className={`text-2xl font-display uppercase italic ${phase === TimerPhase.WORK ? 'text-yellow-400' : 'text-green-400'}`}>
+                        {phase === TimerPhase.WORK ? 'Rest' : 'GO!'}
+                      </span>
+                      <ChevronRight size={20} className="text-zinc-800" />
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              {/* Central Display */}
-              <motion.div 
-                animate={isStarted && !isPaused ? { 
-                  scale: phase === TimerPhase.PREPARE ? [1, 1.01, 1] : [1, 1.002, 1],
-                  boxShadow: phase === TimerPhase.PREPARE ? [
-                    '0 0 20px rgba(59, 130, 246, 0.1)', 
-                    '0 0 40px rgba(59, 130, 246, 0.3)', 
-                    '0 0 20px rgba(59, 130, 246, 0.1)'
-                  ] : []
-                } : {}}
-                transition={{ repeat: Infinity, duration: phase === TimerPhase.PREPARE ? 1 : 2 }}
-                onClick={togglePause}
-                onTouchStart={() => initAudio()}
-                role="button"
-                aria-label={isPaused ? "Resume workout" : "Pause workout"}
-                tabIndex={0}
-                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') togglePause(); }}
-                className={`flex-1 flex flex-col justify-center items-center rounded-xl border-4 transition-all duration-700 relative py-6 sm:py-12 lg:py-0 cursor-pointer group/timer overflow-hidden ${getBorderColor()}`} 
-                style={{ backgroundColor: getBgGlow() }}
-              >
+                {/* Central Display (Left in landscape, Middle in portrait) */}
+                <motion.div 
+                  animate={isStarted && !isPaused ? { 
+                    boxShadow: phase === TimerPhase.PREPARE 
+                      ? '0 0 40px rgba(59, 130, 246, 0.3)' 
+                      : phase === TimerPhase.WORK 
+                      ? '0 0 50px rgba(34, 197, 94, 0.4)'
+                      : phase === TimerPhase.REST
+                      ? '0 0 40px rgba(250, 204, 21, 0.3)'
+                      : '0 0 20px rgba(220, 38, 38, 0.2)'
+                  } : {}}
+                  transition={{ duration: 0.5 }}
+                  onClick={togglePause}
+                  onTouchStart={() => initAudio()}
+                  role="button"
+                  aria-label={isPaused ? "Resume workout" : "Pause workout"}
+                  tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') togglePause(); }}
+                  className={`flex-1 flex flex-col justify-center items-center rounded-xl border-4 transition-all duration-700 relative py-2 landscape:py-1 min-h-0 overflow-hidden cursor-pointer group/timer ${getBorderColor()}`} 
+                  style={{ backgroundColor: getBgGlow() }}
+                >
                 {/* Technical Grid Overlay */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
                   <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
@@ -788,6 +886,9 @@ export default function App() {
                         className="flex flex-col items-center gap-1 sm:gap-2 absolute inset-0 justify-center"
                       >
                         <div className="h-0.5 w-12 sm:w-16 bg-white/20 rounded-full mb-1 sm:mb-2"></div>
+                        <div className="font-display text-2xl sm:text-3xl lg:text-5xl italic tracking-tighter uppercase text-white mb-0.5">
+                          {config.name}
+                        </div>
                         <h2 className={`font-display text-2xl sm:text-3xl lg:text-5xl italic tracking-tighter uppercase ${getPhaseColorClass()}`}>
                           {phase === TimerPhase.PREPARE ? 'Ready' : (phase === TimerPhase.WORK ? 'GO!' : phase)}
                         </h2>
@@ -805,39 +906,24 @@ export default function App() {
                   </div>
                   
                   {/* Countdown Timer Container */}
-                  <div className="relative flex justify-center items-center h-[clamp(6rem,35vw,18rem)] w-full">
-                    <AnimatePresence mode="popLayout" initial={false}>
+                  <div className="relative flex justify-center items-center h-[clamp(6rem,35vw,18rem)] landscape:h-[clamp(4rem,35vh,10rem)] w-full">
+                    <AnimatePresence mode="wait" initial={false}>
                       <motion.div 
-                        key={`${phase}-${timeLeft}`}
-                        initial={{ 
-                          opacity: 0, 
-                          scale: phase === TimerPhase.PREPARE && timeLeft <= 5 ? 1.4 : 0.9,
-                          filter: phase === TimerPhase.PREPARE && timeLeft <= 5 ? 'blur(10px)' : 'blur(0px)'
-                        }}
-                        animate={{ 
-                          opacity: 1, 
-                          scale: 1,
-                          filter: 'blur(0px)'
-                        }}
-                        exit={{ 
-                          opacity: 0, 
-                          scale: phase === TimerPhase.PREPARE && timeLeft <= 5 ? 0.5 : 1.1,
-                          filter: 'blur(5px)'
-                        }}
-                        transition={{ 
-                          duration: phase === TimerPhase.PREPARE && timeLeft <= 5 ? 0.15 : 0.1, 
-                          ease: "easeOut" 
-                        }}
+                        key={phase}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        transition={{ duration: 0.2 }}
                         className="relative z-10 flex items-center justify-center"
                       >
-                        <span className={`text-[clamp(6rem,35vw,18rem)] leading-none font-display text-white select-none tabular-nums tracking-tighter block ${phase === TimerPhase.PREPARE && timeLeft <= 5 ? 'text-blue-400' : ''}`}>
+                        <span className={`text-[clamp(6rem,35vw,18rem)] landscape:text-[clamp(4rem,35vh,10rem)] leading-none font-display select-none tabular-nums tracking-tighter block ${getColorClass()} ${(phase === TimerPhase.PREPARE || phase === TimerPhase.WORK) && timeLeft <= 5 ? 'text-blue-400' : ''}`}>
                           {phase === TimerPhase.DONE ? 'FIN' : formatTime(timeLeft)}
                         </span>
                       </motion.div>
                     </AnimatePresence>
                   </div>
 
-                  <div className="flex gap-2 sm:gap-3 mt-4 sm:mt-8 items-center h-16">
+                  <div className={`flex mt-2 landscape:mt-1 items-center h-12 landscape:h-8 w-full px-4 justify-center ${config.reps > 12 ? 'gap-0.5' : config.reps > 8 ? 'gap-1' : 'gap-2 sm:gap-3'}`}>
                     {Array.from({length: config.reps}).map((_, i) => {
                       const isWorkActive = phase === TimerPhase.WORK && currentRep === i + 1;
                       const isRestActive = phase === TimerPhase.REST && currentRep === i + 1;
@@ -848,30 +934,34 @@ export default function App() {
                         <React.Fragment key={i}>
                           <motion.div 
                             animate={isWorkActive ? { 
-                              height: [40, 56, 40],
-                              opacity: [0.8, 1, 0.8],
-                              boxShadow: ['0 0 10px rgba(34,197,94,0.3)', '0 0 30px rgba(34,197,94,0.8)', '0 0 10px rgba(34,197,94,0.3)']
+                              height: 56,
+                              opacity: 1,
+                              boxShadow: '0 0 60px rgba(59,130,246,0.9)'
                             } : { 
-                              height: isWorkActive ? 56 : 40 
-                            }}
-                            transition={isWorkActive ? { repeat: Infinity, duration: 1.5 } : { duration: 0.3 }}
-                            className={`w-2.5 sm:w-3.5 rounded-sm skew-x-[-15deg] transition-all duration-500 ${
-                              isWorkDone ? 'bg-green-500' : isWorkActive ? 'bg-green-400 scale-y-110' : 'bg-zinc-900 border border-zinc-800'
+                              height: 40,
+                              opacity: 0.8,
+                              boxShadow: 'none'
+                             }}
+                            transition={{ duration: 0.3 }}
+                            className={`flex-1 max-w-[12px] sm:max-w-[14px] h-10 rounded-sm skew-x-[-15deg] transition-all duration-500 ${
+                              isWorkDone ? 'bg-blue-600 border border-black' : isWorkActive ? 'bg-blue-500 border border-black scale-y-110' : 'bg-zinc-900 border border-zinc-800'
                             }`}
                           />
                           
                           {i < config.reps - 1 && (
                             <motion.div 
                               animate={isRestActive ? { 
-                                height: [24, 36, 24],
-                                opacity: [0.8, 1, 0.8],
-                                boxShadow: ['0 0 10px rgba(239,68,68,0.3)', '0 0 30px rgba(239,68,68,0.8)', '0 0 10px rgba(239,68,68,0.3)']
+                                height: 36,
+                                opacity: 1,
+                                boxShadow: '0 0 50px rgba(234,179,8,0.8)'
                               } : { 
-                                height: isRestActive ? 36 : 24
+                                height: 24,
+                                opacity: 0.8,
+                                boxShadow: 'none'
                               }}
-                              transition={isRestActive ? { repeat: Infinity, duration: 1.5 } : { duration: 0.3 }}
-                              className={`w-1.5 sm:w-2 rounded-sm skew-x-[-15deg] transition-all duration-500 ${
-                                isRestDone ? 'bg-red-500' : isRestActive ? 'bg-red-400 scale-y-110' : 'bg-zinc-950/50 border border-zinc-900/50'
+                              transition={{ duration: 0.3 }}
+                              className={`flex-[0.6] max-w-[8px] sm:max-w-[10px] h-6 rounded-sm skew-x-[-15deg] transition-all duration-500 ${
+                                isRestDone ? 'bg-yellow-700 border border-black' : isRestActive ? 'bg-yellow-500 border border-black scale-y-110' : 'bg-zinc-950/50 border border-zinc-900/50'
                               }`}
                             />
                           )}
@@ -893,35 +983,36 @@ export default function App() {
                     transition={{ ease: "linear", duration: isPaused ? 0 : 1 }}
                   />
                 </div>
-              </motion.div>
+                </motion.div>
+              </div>
 
               {/* Actions Grid */}
-              <div className="flex flex-col sm:flex-row justify-center gap-4 sm:gap-6 px-4 w-full max-w-5xl mx-auto mt-12 sm:mt-8">
+              <div className="flex flex-row justify-center gap-2 sm:gap-6 px-2 sm:px-4 w-full max-w-5xl mx-auto mb-2 landscape:mb-1 shrink-0">
                 <button 
                   onClick={() => startWorkout(config)}
                   onTouchStart={() => initAudio()}
-                  className="flex-1 relative overflow-hidden h-20 sm:h-32 bg-blue-600 border-2 border-blue-400/50 text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:bg-blue-500 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_30px_rgba(37,99,235,0.3)] group"
+                  className="flex-1 relative overflow-hidden h-14 sm:h-24 landscape:h-12 bg-blue-600 border-2 border-blue-400/50 text-white rounded-xl font-display text-xl sm:text-3xl lg:text-5xl uppercase italic hover:bg-blue-500 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_20px_rgba(37,99,235,0.2)] group"
                 >
                   <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
                     <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent"></div>
                   </div>
-                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-4 sm:gap-6">
-                    <RotateCcw size={32} className="group-hover:rotate-[-90deg] transition-transform" />
-                    <span className="inline">RESTART</span>
+                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-2 sm:gap-4">
+                    <RotateCcw size={24} className="sm:w-8 sm:h-8 group-hover:rotate-[-90deg] transition-transform" />
+                    <span className="landscape:text-lg sm:landscape:text-2xl">RESTART</span>
                   </div>
                 </button>
                 <button 
                   onClick={exitWorkout}
-                  className="flex-1 relative overflow-hidden h-20 sm:h-32 bg-crimson-red text-white rounded-xl font-display text-2xl sm:text-3xl lg:text-5xl uppercase italic hover:opacity-90 transition-all group"
+                  className="flex-1 relative overflow-hidden h-14 sm:h-24 landscape:h-12 bg-crimson-red text-white rounded-xl font-display text-xl sm:text-3xl lg:text-5xl uppercase italic hover:opacity-90 transition-all group"
                 >
                   <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden">
                     <div className="absolute top-0 left-0 w-full h-full" style={{ backgroundImage: 'radial-gradient(circle, #fff 1px, transparent 1px)', backgroundSize: '40px 40px' }}></div>
                     <div className="absolute inset-0 bg-gradient-to-tr from-white/10 to-transparent"></div>
                   </div>
-                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-4 sm:gap-6">
-                    <X size={32} className="group-hover:rotate-90 transition-transform" />
-                    <span className="inline">ABORT</span>
+                  <div className="relative z-10 flex items-center justify-center w-full h-full gap-2 sm:gap-4">
+                    <X size={24} className="sm:w-8 sm:h-8 group-hover:rotate-90 transition-transform" />
+                    <span className="landscape:text-lg sm:landscape:text-2xl">ABORT</span>
                   </div>
                 </button>
               </div>
@@ -988,16 +1079,16 @@ export default function App() {
                 
                 <nav className="space-y-3">
                   <button 
-                    onClick={() => { setView(AppView.TRAINING); setIsStarted(false); setIsMenuOpen(false); }}
+                    onClick={() => { setView(AppView.ROUTINES); setIsStarted(false); setIsMenuOpen(false); }}
                     className={`w-full p-6 rounded-sm flex items-center justify-between transition-all group border-2 ${
-                      view === AppView.TRAINING ? 'bg-neon-lime/10 border-neon-lime text-neon-lime font-black' : 'bg-transparent border-zinc-900 text-white hover:border-zinc-700'
+                      view === AppView.ROUTINES ? 'bg-neon-lime/10 border-neon-lime text-neon-lime font-black' : 'bg-transparent border-zinc-900 text-white hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center gap-6">
-                      <Timer size={28} className={view === AppView.TRAINING ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
-                      <span className="text-4xl font-display uppercase italic">Train</span>
+                      <ClipboardList size={28} className={view === AppView.ROUTINES ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
+                      <span className="text-4xl font-display uppercase italic">ROUTINES</span>
                     </div>
-                    {view === AppView.TRAINING && <Zap size={20} className="fill-current animate-pulse" />}
+                    {view === AppView.ROUTINES && <Zap size={20} className="fill-current animate-pulse" />}
                   </button>
 
                   <button 
@@ -1008,22 +1099,22 @@ export default function App() {
                   >
                     <div className="flex items-center gap-6">
                       <History size={28} className={view === AppView.HISTORY ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
-                      <span className="text-4xl font-display uppercase italic">Journal</span>
+                      <span className="text-4xl font-display uppercase italic">JOURNAL</span>
                     </div>
                     {view === AppView.HISTORY && <Zap size={20} className="fill-current animate-pulse" />}
                   </button>
 
                   <button 
-                    onClick={() => { setView(AppView.ROUTINES); setIsStarted(false); setIsMenuOpen(false); }}
+                    onClick={() => { setView(AppView.TRAINING); setIsStarted(false); setIsMenuOpen(false); }}
                     className={`w-full p-6 rounded-sm flex items-center justify-between transition-all group border-2 ${
-                      view === AppView.ROUTINES ? 'bg-neon-lime/10 border-neon-lime text-neon-lime font-black' : 'bg-transparent border-zinc-900 text-white hover:border-zinc-700'
+                      view === AppView.TRAINING ? 'bg-neon-lime/10 border-neon-lime text-neon-lime font-black' : 'bg-transparent border-zinc-900 text-white hover:border-zinc-700'
                     }`}
                   >
                     <div className="flex items-center gap-6">
-                      <ClipboardList size={28} className={view === AppView.ROUTINES ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
-                      <span className="text-4xl font-display uppercase italic">Presets</span>
+                      <Timer size={28} className={view === AppView.TRAINING ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
+                      <span className="text-4xl font-display uppercase italic">CUSTOM</span>
                     </div>
-                    {view === AppView.ROUTINES && <Zap size={20} className="fill-current animate-pulse" />}
+                    {view === AppView.TRAINING && <Zap size={20} className="fill-current animate-pulse" />}
                   </button>
 
                   <button 
@@ -1032,35 +1123,105 @@ export default function App() {
                       isHelpOpen ? 'bg-neon-lime/10 border-neon-lime text-neon-lime font-black' : 'bg-transparent border-zinc-900 text-white hover:border-zinc-700'
                     }`}
                   >
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-6 text-white">
                       <HelpCircle size={28} className={isHelpOpen ? 'text-neon-lime' : 'text-zinc-500 group-hover:text-white'} />
-                      <span className="text-4xl font-display uppercase italic">Help</span>
+                      <span className="text-4xl font-display uppercase italic text-white">HELP</span>
                     </div>
                     <ChevronRight size={24} className="text-zinc-600 group-hover:translate-x-1 transition-transform" />
                   </button>
                 </nav>
 
                 <div className="mt-8 pt-8 border-t border-zinc-900 flex flex-col gap-4">
-                  <div className="flex items-center justify-between p-5 bg-zinc-900/50 border border-zinc-900 rounded-sm">
-                    <div className="flex items-center gap-4">
-                      {soundEnabled ? <Volume2 size={24} className="text-neon-lime" /> : <VolumeX size={24} className="text-zinc-500" />}
-                      <span className="font-bold text-xs uppercase tracking-widest text-white">{soundEnabled ? 'Live Audio' : 'Muted'}</span>
-                    </div>
+                  <div className={`flex flex-col gap-2 transition-all duration-500 ${isMenuOpen ? 'opacity-100' : 'opacity-0'}`}>
+                    {/* Audio Header / Expandable Control */}
                     <button 
-                      onClick={() => {
-                        const newState = !soundEnabled;
-                        setSoundEnabled(newState);
-                        if (newState) initAudio();
-                      }}
-                      onTouchStart={() => {
-                        if (!soundEnabled) initAudio();
-                      }}
-                      className={`w-14 h-7 rounded-sm relative transition-colors ${soundEnabled ? 'bg-neon-lime' : 'bg-zinc-800'}`}
+                      onClick={() => setIsAudioSettingsExpanded(!isAudioSettingsExpanded)}
+                      className={`flex items-center justify-between p-5 bg-zinc-900/50 border rounded-sm transition-all ${
+                        isAudioSettingsExpanded ? 'border-neon-lime ring-1 ring-neon-lime/20' : 'border-zinc-900 hover:border-zinc-700'
+                      }`}
                     >
-                      <div className={`absolute top-1 w-5 h-5 rounded-sm transition-all ${soundEnabled ? 'left-8 bg-black' : 'left-1 bg-white'}`} />
+                      <div className="flex items-center gap-4">
+                        {soundEnabled ? <Volume2 size={24} className="text-neon-lime" /> : <VolumeX size={24} className="text-zinc-500" />}
+                        <div className="flex flex-col items-start">
+                          <span className="font-bold text-xs uppercase tracking-widest text-white">Audio Status</span>
+                          <span className="text-[10px] text-white/50 font-mono uppercase tracking-widest">{soundEnabled ? `Live (${soundMode})` : 'Muted'}</span>
+                        </div>
+                      </div>
+                      <ChevronDown size={20} className={`text-zinc-500 transition-transform duration-300 ${isAudioSettingsExpanded ? 'rotate-180 text-neon-lime' : ''}`} />
                     </button>
+
+                    {/* Expandable Settings Box */}
+                    <AnimatePresence>
+                      {isAudioSettingsExpanded && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          transition={{ duration: 0.3, ease: 'easeInOut' }}
+                          className="overflow-hidden"
+                        >
+                          <div className="bg-zinc-900/80 border border-zinc-800 rounded-sm p-4 flex flex-col gap-6 mt-1 backdrop-blur-sm">
+                            {/* Master Toggle */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <Volume2 size={18} className={soundEnabled ? 'text-neon-lime' : 'text-zinc-600'} />
+                                <span className="text-[11px] font-black uppercase tracking-wider text-white">Master Sound</span>
+                              </div>
+                              <button 
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const newState = !soundEnabled;
+                                  setSoundEnabled(newState);
+                                  if (newState) initAudio();
+                                }}
+                                className={`w-12 h-6 rounded-sm relative transition-colors ${soundEnabled ? 'bg-neon-lime' : 'bg-zinc-800'}`}
+                              >
+                                <div className={`absolute top-1 w-4 h-4 rounded-sm transition-all ${soundEnabled ? 'left-7 bg-black' : 'left-1 bg-white'}`} />
+                              </button>
+                            </div>
+
+                              <div className="flex flex-col gap-3 pt-2 border-t border-zinc-800/50 text-white">
+                                <div className="flex items-center gap-3">
+                                  <Settings2 size={18} className="text-white/40" />
+                                  <span className="text-[11px] font-black uppercase tracking-wider">Output Profile</span>
+                                </div>
+                                <div className="flex p-1 bg-black rounded-sm border border-zinc-800 relative">
+                                  <motion.div 
+                                    className="absolute top-1 bottom-1 w-[calc(50%-4px)] bg-white rounded-sm z-0"
+                                    initial={false}
+                                    animate={{ x: soundMode === SoundMode.OFFICE ? 0 : '100%', left: soundMode === SoundMode.OFFICE ? 4 : 4 }}
+                                    transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                                  />
+                                  <button
+                                    onClick={() => { setSoundMode(SoundMode.OFFICE); initAudio(); }}
+                                    className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest z-10 transition-colors ${
+                                      soundMode === SoundMode.OFFICE ? 'text-black' : 'text-white/40 font-bold'
+                                    }`}
+                                  >
+                                    Office
+                                  </button>
+                                  <button
+                                    onClick={() => { setSoundMode(SoundMode.GYM); initAudio(); }}
+                                    className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest z-10 transition-colors ${
+                                      soundMode === SoundMode.GYM ? 'text-black' : 'text-white/40 font-bold'
+                                    }`}
+                                  >
+                                    Gym
+                                  </button>
+                                </div>
+                                <p className="text-[9px] font-mono text-white/60 leading-tight">
+                                  {soundMode === SoundMode.OFFICE 
+                                    ? "Smooth sine-wave pulses optimized for shared spaces." 
+                                    : "Aggressive square/sawtooth alerts for maximum focus."}
+                                </p>
+                              </div>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
-                  <p className="text-xs text-center text-zinc-600 font-bold uppercase tracking-[0.3em]">
+
+                  <p className="text-xs text-center text-zinc-600 font-bold uppercase tracking-[0.3em] mt-4">
                     CORE_OS_2.0.0 // BUILD_822
                   </p>
                 </div>
